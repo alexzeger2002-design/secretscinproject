@@ -92,6 +92,7 @@ function VideoPlayer({ src }: { src: string }) {
       <video
         ref={videoRef}
         src={src}
+        preload="none"
         className="w-full h-full object-contain"
         loop
         muted
