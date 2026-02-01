@@ -1,5 +1,4 @@
 import { motion } from 'framer-motion';
-import { Send } from 'lucide-react';
 import { useLanding } from '../../contexts/LandingContext';
 import contentData from '../../data/content.json';
 

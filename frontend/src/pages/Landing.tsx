@@ -14,10 +14,10 @@ import { FinalCTA } from '../components/sections/FinalCTA';
 export function Landing() {
   // Устанавливаем дефолтный URL сразу, чтобы не показывать загрузку
   const [redirectUrl, setRedirectUrl] = useState<string | null>('https://t.me/SecretScin_bot');
-  const [visitId, setVisitId] = useState<number | null>(null);
+  const [visitId] = useState<number | null>(null);
   const [linkCode, setLinkCode] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false); // Начинаем с false, чтобы не показывать загрузку
-  const [error, setError] = useState<string | null>(null);
+  const [loading] = useState(false); // Начинаем с false, чтобы не показывать загрузку
+  const [error] = useState<string | null>(null);
 
   // Функция для получения ссылки на бота и создания визита
   const updateBotUrl = async () => {

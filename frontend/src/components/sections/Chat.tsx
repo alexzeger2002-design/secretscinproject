@@ -41,7 +41,7 @@ export function Chat() {
     // Очищаем предыдущие сообщения только при первом рендере
     setVisibleMessages([]);
     
-    const timeouts: NodeJS.Timeout[] = [];
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
     
     messages.forEach((message) => {
       const timeout = setTimeout(() => {
