@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { visitService } from '../services';
 import { generateFingerprint, getUrlParam } from '../utils/fingerprint';
 import { LandingProvider } from '../contexts/LandingContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { Hero } from '../components/sections/Hero';
-import { Chat } from '../components/sections/Chat';
-import { Showcase } from '../components/sections/Showcase';
-import { Benefits } from '../components/sections/Benefits';
-import { Stats } from '../components/sections/Stats';
-import { Steps } from '../components/sections/Steps';
-import { FinalCTA } from '../components/sections/FinalCTA';
+
+// Lazy loading для компонентов - загружаются по мере необходимости
+const Chat = lazy(() => import('../components/sections/Chat').then(m => ({ default: m.Chat })));
+const Showcase = lazy(() => import('../components/sections/Showcase').then(m => ({ default: m.Showcase })));
+const Benefits = lazy(() => import('../components/sections/Benefits').then(m => ({ default: m.Benefits })));
+const Stats = lazy(() => import('../components/sections/Stats').then(m => ({ default: m.Stats })));
+const Steps = lazy(() => import('../components/sections/Steps').then(m => ({ default: m.Steps })));
+const FinalCTA = lazy(() => import('../components/sections/FinalCTA').then(m => ({ default: m.FinalCTA })));
 
 export function Landing() {
   // Устанавливаем дефолтный URL сразу, чтобы не показывать загрузку
@@ -25,14 +27,21 @@ export function Landing() {
       const code = getUrlParam('code');
       const fingerprint = generateFingerprint();
       
-      // Получаем ссылку И создаем визит одновременно через visitService
-      // Это гарантирует что визит создается только один раз
-      const result = await visitService.createVisit({
-        fingerprint,
-        referrer: document.referrer || undefined,
-        ua: navigator.userAgent,
-        linkCode: code || undefined,
-      }, code || undefined);
+      // Используем Promise.race для быстрого fallback если API медленный
+      const result = await Promise.race([
+        visitService.createVisit({
+          fingerprint,
+          referrer: document.referrer || undefined,
+          ua: navigator.userAgent,
+          linkCode: code || undefined,
+        }, code || undefined),
+        new Promise<{ redirectUrl: string; visitId: number }>((resolve) => 
+          setTimeout(() => resolve({ 
+            redirectUrl: redirectUrl || 'https://t.me/SecretScin_bot', 
+            visitId: -1 
+          }), 2000) // Fallback через 2 секунды
+        )
+      ]);
       
       if (result?.redirectUrl) {
         setRedirectUrl(result.redirectUrl);
@@ -51,15 +60,18 @@ export function Landing() {
     const code = getUrlParam('code');
     if (code) setLinkCode(code);
 
-    // Первоначальная загрузка ссылки
+    // Первоначальная загрузка ссылки - с задержкой чтобы не блокировать рендер
     // Визит создается автоматически на бэкенде при запросе ссылки через updateBotUrl
     // НЕ создаем визит отдельно, чтобы избежать дублирования
-    updateBotUrl();
+    // Используем setTimeout чтобы не блокировать первоначальный рендер
+    const timeoutId = setTimeout(() => {
+      updateBotUrl();
+    }, 100); // Небольшая задержка для первоначального рендера
 
-    // Обновляем ссылку каждые 10 секунд, чтобы всегда была актуальная
+    // Обновляем ссылку каждые 30 секунд (увеличено с 10 для снижения нагрузки)
     const interval = setInterval(() => {
       updateBotUrl();
-    }, 10000); // 10 секунд
+    }, 30000); // 30 секунд
 
     // Обновляем ссылку при возврате фокуса на страницу (когда пользователь возвращается на вкладку)
     const handleFocus = () => {
@@ -68,6 +80,7 @@ export function Landing() {
     window.addEventListener('focus', handleFocus);
 
     return () => {
+      clearTimeout(timeoutId);
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };
@@ -121,13 +134,25 @@ export function Landing() {
         {/* Sections */}
         <Hero />
         <ErrorBoundary>
-          <Chat />
+          <Suspense fallback={<div className="min-h-[200px]" />}>
+            <Chat />
+          </Suspense>
         </ErrorBoundary>
-        <Showcase />
-        <Benefits />
-        <Stats />
-        <Steps />
-        <FinalCTA />
+        <Suspense fallback={<div className="min-h-[200px]" />}>
+          <Showcase />
+        </Suspense>
+        <Suspense fallback={<div className="min-h-[200px]" />}>
+          <Benefits />
+        </Suspense>
+        <Suspense fallback={<div className="min-h-[200px]" />}>
+          <Stats />
+        </Suspense>
+        <Suspense fallback={<div className="min-h-[200px]" />}>
+          <Steps />
+        </Suspense>
+        <Suspense fallback={<div className="min-h-[200px]" />}>
+          <FinalCTA />
+        </Suspense>
       </div>
     </LandingProvider>
   );
