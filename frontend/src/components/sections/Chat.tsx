@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Zap, Send } from 'lucide-react';
 import { GlassCard } from '../ui/GlassCard';
@@ -14,6 +14,102 @@ interface Message {
   src?: string;
   poster?: string;
   delay: number;
+}
+
+// Компонент для видео с программным автозапуском (работает на мобильных)
+function VideoPlayer({ src }: { src: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Функция для запуска видео
+    const playVideo = async () => {
+      try {
+        await video.play();
+        setIsPlaying(true);
+      } catch (error) {
+        // Если автозапуск заблокирован, показываем кнопку play
+        setIsPlaying(false);
+      }
+    };
+
+    // Пытаемся запустить видео сразу
+    playVideo();
+
+    // Используем Intersection Observer для запуска при появлении в viewport
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && !isPlaying) {
+            playVideo();
+          }
+        });
+      },
+      { threshold: 0.3 }
+    );
+
+    observer.observe(video);
+
+    // Запускаем видео после первого взаимодействия пользователя (скролл, клик, тач)
+    const userInteractionEvents = ['scroll', 'touchstart', 'click', 'mousedown'];
+    const handleUserInteraction = () => {
+      if (!isPlaying) {
+        playVideo();
+        // Удаляем обработчики после первого взаимодействия
+        userInteractionEvents.forEach(event => {
+          document.removeEventListener(event, handleUserInteraction);
+        });
+      }
+    };
+
+    userInteractionEvents.forEach(event => {
+      document.addEventListener(event, handleUserInteraction, { once: true, passive: true });
+    });
+
+    // Обработчик клика на само видео
+    const handleVideoClick = () => {
+      if (!isPlaying) {
+        playVideo();
+      }
+    };
+
+    video.addEventListener('click', handleVideoClick);
+
+    return () => {
+      observer.disconnect();
+      video.removeEventListener('click', handleVideoClick);
+      userInteractionEvents.forEach(event => {
+        document.removeEventListener(event, handleUserInteraction);
+      });
+    };
+  }, [isPlaying]);
+
+  return (
+    <div className="relative w-full h-full">
+      <video
+        ref={videoRef}
+        src={src}
+        className="w-full h-full object-contain"
+        loop
+        muted
+        playsInline
+        style={{ maxHeight: '400px', display: 'block' }}
+      />
+      {!isPlaying && (
+        <div
+          className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer z-20"
+          onClick={() => videoRef.current?.play()}
+        >
+          <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-full flex items-center justify-center pl-1">
+            <Play size={20} fill="white" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function Chat() {
@@ -104,24 +200,11 @@ export function Chat() {
 
                   {message.type === 'video' && (
                     <div className="relative overflow-hidden rounded-xl border border-purple-500/30 w-full max-w-[200px] bg-black group">
-                      <video
-                        src={videoChat}
-                        className="w-full h-full object-contain"
-                        loop
-                        muted
-                        playsInline
-                        autoPlay
-                        style={{ maxHeight: '400px', display: 'block' }}
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-3 pointer-events-none">
+                      <VideoPlayer src={videoChat} />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-3 pointer-events-none z-10">
                         <span className="text-xs font-mono text-[#00F0FF] flex items-center gap-1">
                           <Zap size={12} /> PROCESSED
                         </span>
-                      </div>
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                        <div className="w-10 h-10 bg-white/20 backdrop-blur rounded-full flex items-center justify-center pl-1">
-                          <Play size={16} fill="white" />
-                        </div>
                       </div>
                     </div>
                   )}
