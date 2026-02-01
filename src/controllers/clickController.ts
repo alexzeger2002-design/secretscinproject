@@ -29,6 +29,9 @@ export class ClickController {
         linkId = link.id;
       } else {
         // Если передан только visitId, находим ссылку через визит
+        if (!validatedData.visitId) {
+          throw new Error('visitId or linkCode is required');
+        }
         const visit = await prisma.visit.findUnique({
           where: { id: validatedData.visitId },
           select: { linkId: true },
@@ -41,6 +44,23 @@ export class ClickController {
       }
 
       // Регистрируем клик
+      // Если есть linkCode но нет visitId, создаем визит на лету
+      if (!validatedData.visitId && validatedData.linkCode) {
+        const newVisit = await prisma.visit.create({
+          data: {
+            linkId: linkId,
+            ip: req.ip || 'unknown',
+            browserFingerprint: 'click-tracked',
+            userAgent: req.headers['user-agent'] || 'Unknown',
+            isSuspicious: false,
+          },
+        });
+        validatedData.visitId = newVisit.id;
+      }
+      
+      if (!validatedData.visitId) {
+        throw new Error('visitId is required');
+      }
       const click = await clickService.registerClick(validatedData.visitId, linkId);
 
       res.status(201).json({
@@ -105,10 +125,11 @@ export class ClickController {
       if (linkId) {
         try {
           let click;
-          let actualVisitId = validatedData.visitId;
+          let actualVisitId: number;
           
           // Если visitId валидный (> 0), используем его
-          if (actualVisitId && actualVisitId > 0) {
+          if (validatedData.visitId && validatedData.visitId > 0) {
+            actualVisitId = validatedData.visitId;
             // Проверяем что визит существует
             const visitExists = await prisma.visit.findUnique({
               where: { id: actualVisitId },
