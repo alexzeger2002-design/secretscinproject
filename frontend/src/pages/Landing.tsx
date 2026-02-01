@@ -39,7 +39,7 @@ export function Landing() {
           setTimeout(() => resolve({ 
             redirectUrl: redirectUrl || 'https://t.me/SecretScin_bot', 
             visitId: -1 
-          }), 2000) // Fallback через 2 секунды
+          }), 4000) // Fallback через 4 секунды - баланс между скоростью и надежностью
         )
       ]);
       

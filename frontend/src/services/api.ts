@@ -8,7 +8,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 5000, // 5 секунд таймаут - быстрый fallback для медленных запросов
+  timeout: 15000, // 15 секунд таймаут - достаточно для "просыпающегося" Render
 });
 
 // Добавление токена к запросам
