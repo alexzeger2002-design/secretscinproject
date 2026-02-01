@@ -13,6 +13,7 @@
    - **Build Command**: `npm install && npm run prisma:generate && npm run build`
    - **Start Command**: `npm start`
    - **Root Directory**: `.` (оставьте пустым)
+   - **Auto-Deploy**: `Yes` (автоматический деплой при push в GitHub)
 
 5. Добавьте Environment Variables:
    ```
