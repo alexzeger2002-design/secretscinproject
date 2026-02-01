@@ -19,13 +19,18 @@
 
 5. Добавьте Environment Variables:
    ```
-   DATABASE_URL=ваша_строка_подключения_supabase
+   DATABASE_URL=ваша_строка_подключения_supabase?pgbouncer=true&connection_limit=1
    PORT=3000
    NODE_ENV=production
    TELEGRAM_LINK=https://t.me/SecretScin_bot
    JWT_SECRET=ваш_секретный_ключ_минимум_32_символа
    JWT_EXPIRES_IN=800d
    ```
+   
+   **ВАЖНО для Supabase:**
+   - Добавьте `?pgbouncer=true&connection_limit=1` в конец DATABASE_URL
+   - Или используйте Transaction Pooler (порт 6543): замените `:5432` на `:6543` в URL
+   - Это предотвратит ошибку "MaxClientsInSessionMode"
 
 6. Нажмите "Create Web Service"
 7. Дождитесь деплоя (5-10 минут)
@@ -68,6 +73,37 @@
 - **Render бесплатный тариф**: сервис "засыпает" после 15 минут бездействия. Первый запрос может занять 30-60 секунд.
 - **Переменные окружения**: никогда не коммитьте `.env` файлы. Все секреты храните в настройках Render/Vercel.
 - **CORS**: если возникают ошибки CORS, обновите `src/app.ts` и добавьте ваш Vercel URL в список разрешенных источников.
+
+## Проблемы с подключениями к БД (MaxClientsInSessionMode)
+
+Если видите ошибку "MaxClientsInSessionMode: max clients reached":
+
+1. **Быстрое решение (бесплатно):**
+   - Добавьте `&connection_limit=1` в DATABASE_URL в Render
+   - Или переключитесь на Transaction Pooler (порт 6543 вместо 5432)
+
+2. **Лучшее решение (для production):**
+   - Используйте Transaction Pooler: замените `:5432` на `:6543` в DATABASE_URL
+   - Transaction Pooler поддерживает больше одновременных подключений
+
+3. **Если проблема сохраняется:**
+   - Рассмотрите платный план Supabase ($25/месяц) - больше подключений
+   - Или платный план Render ($7/месяц) - сервис не "засыпает"
+
+## Рекомендации по планам
+
+### Для начала (бесплатно):
+- ✅ Render Free + Supabase Free + Vercel Free
+- ✅ Используйте Transaction Pooler (порт 6543)
+- ✅ Добавьте `connection_limit=1` в DATABASE_URL
+- ⚠️ Первый запрос после простоя может быть медленным (30-60 сек)
+
+### Для production (рекомендуется):
+- 💰 **Render Starter ($7/месяц)**: сервис не "засыпает", быстрее ответы
+- 💰 **Supabase Pro ($25/месяц)**: больше подключений, лучше производительность
+- ✅ Vercel Free (достаточно для фронтенда)
+
+**Итого для production: ~$32/месяц** - но сайт будет работать стабильно и быстро.
 
 ## Создание админа (если нужно)
 
