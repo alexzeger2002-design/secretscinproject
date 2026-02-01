@@ -14,6 +14,8 @@
    - **Start Command**: `npm start`
    - **Root Directory**: `.` (оставьте пустым)
    - **Auto-Deploy**: `Yes` (автоматический деплой при push в GitHub)
+   
+   **ВАЖНО:** Убедитесь что Render имеет доступ к вашему приватному репозиторию. Если видите предупреждение "we don't have access to your repo", нажмите "Connect GitHub" и дайте доступ к организации `alexzeger2002-design`.
 
 5. Добавьте Environment Variables:
    ```

@@ -5,6 +5,7 @@ services:
     buildCommand: npm install && npm run prisma:generate && npm run build
     startCommand: npm start
     plan: free
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
