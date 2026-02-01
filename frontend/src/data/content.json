@@ -1,0 +1,108 @@
+{
+  "global": {
+    "appName": "PULSE ROOM",
+    "botUrl": "https://t.me/SecretScinBot",
+    "ctaText": "ПЕРЕЙТИ В БОТА",
+    "disclaimer": "Сервис предназначен для лиц старше 18 лет. AI-генерации являются художественным вымыслом."
+  },
+  "hero": {
+    "badge": "AI Generation v2.0 Live",
+    "title": {
+      "main": "Твои фантазии.",
+      "sub": "Теперь в 8K реализме."
+    },
+    "description": "AI-алгоритмы, которые видят сквозь одежду и социальные нормы. Раскрой скрытое на фото или создай сценарий, о котором боялся даже мечтать.",
+    "subCta": "Присоединяйся к закрытому клубу"
+  },
+  "chat": {
+    "botName": "Братан",
+    "status": "online",
+    "messages": [
+      {
+        "id": 1,
+        "type": "text",
+        "sender": "user",
+        "content": "Бро, я заколебался, обычный контент больше не цепляет. Хочется чего-то реального. 😩",
+        "delay": 0.5
+      },
+      {
+        "id": 2,
+        "type": "text",
+        "sender": "bot",
+        "content": "Ты просто не используешь правильные инструменты. Смотри, как AI меняет реальность 👇",
+        "delay": 2.0
+      },
+      {
+        "id": 3,
+        "type": "video",
+        "sender": "bot",
+        "poster": "/assets/video-poster-1.jpg",
+        "src": "/assets/demo-preview.mp4",
+        "delay": 4.0
+      },
+      {
+        "id": 4,
+        "type": "text",
+        "sender": "user",
+        "content": "Вау! Это реально возможно???",
+        "delay": 7.0
+      },
+      {
+        "id": 5,
+        "type": "button",
+        "sender": "bot",
+        "content": "Держи ссылку, не благодари 😉",
+        "delay": 8.5
+      }
+    ]
+  },
+  "showcase": {
+    "title": "Визуальные сценарии",
+    "cards": [
+      {
+        "id": 1,
+        "videoSrc": "/assets/showcase-1.mp4",
+        "poster": "/assets/poster-1.jpg",
+        "tag": "X-RAY MODE"
+      },
+      {
+        "id": 2,
+        "videoSrc": "/assets/showcase-2.mp4",
+        "poster": "/assets/poster-2.jpg",
+        "tag": "STORY MODE"
+      }
+    ]
+  },
+  "benefits": [
+    {
+      "id": 1,
+      "title": "Мгновенный результат",
+      "desc": "Генерация за 15 секунд на GPU кластере."
+    },
+    {
+      "id": 2,
+      "title": "Реалистичность 2026",
+      "desc": "Качество кожи и текстур уровня 8K."
+    },
+    {
+      "id": 3,
+      "title": "Анонимность",
+      "desc": "Данные удаляются сразу после генерации."
+    },
+    {
+      "id": 4,
+      "title": "Внутри Telegram",
+      "desc": "Никаких приложений. Удобно и скрытно."
+    }
+  ],
+  "stats": {
+    "mainCount": "500,000+",
+    "mainLabel": "Обработанных фото и видео",
+    "subStat": "TOP #1 AI Service"
+  },
+  "steps": [
+    "Запусти бота",
+    "Загрузи фото",
+    "Получи результат"
+  ]
+}

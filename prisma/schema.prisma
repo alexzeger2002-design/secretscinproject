@@ -1,0 +1,82 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Link {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique // Уникальный код ссылки (например: abc123)
+  name        String?   // Название ссылки (для удобства в админке)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  visits      Visit[]
+  clicks      Click[]
+
+  @@index([code])
+  @@index([isActive])
+}
+
+model Visit {
+  id                Int      @id @default(autoincrement())
+  linkId            Int?     // Связь со ссылкой
+  ip                String
+  country           String?
+  browserFingerprint String
+  userAgent         String
+  referrer          String?
+  utmTags           Json?
+  isSuspicious      Boolean  @default(false)
+  timestamp         DateTime @default(now())
+  
+  link              Link?    @relation(fields: [linkId], references: [id], onDelete: SetNull)
+  clicks            Click[]
+
+  @@index([browserFingerprint])
+  @@index([timestamp])
+  @@index([country])
+  @@index([linkId])
+}
+
+model Click {
+  id        Int      @id @default(autoincrement())
+  visitId   Int      @unique // Связь с визитом (уникальный, один клик на визит)
+  linkId    Int      // Связь со ссылкой
+  timestamp DateTime @default(now())
+  
+  visit     Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  link      Link     @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@index([linkId])
+  @@index([timestamp])
+}
+
+model AdminUser {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String   // Хешированный пароль
+  email     String?  @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([username])
+}
+
+model Settings {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique // Ключ настройки (например: 'telegram_bot_url')
+  value     String   // Значение настройки
+  updatedAt DateTime @updatedAt
+  updatedBy Int?     // ID администратора, который обновил настройку
+
+  @@index([key])
+}

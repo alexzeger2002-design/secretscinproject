@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: secretscin-backend
+    env: node
+    buildCommand: npm install && npm run prisma:generate && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      # Добавьте остальные переменные через Render Dashboard:
+      # DATABASE_URL, TELEGRAM_LINK, JWT_SECRET, JWT_EXPIRES_IN
