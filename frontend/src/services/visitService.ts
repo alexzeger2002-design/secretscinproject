@@ -48,15 +48,23 @@ async function retryRequest<T>(
 
 export const visitService = {
   async createVisit(data: VisitData, code?: string): Promise<VisitResponse> {
-    // Используем увеличенный таймаут для критичного запроса visit
-    return retryRequest(() => 
-      api.post('/visit', data, {
+    // НЕ используем retry для createVisit, чтобы избежать дубликатов
+    // Если запрос не прошел - это не критично, сайт должен работать
+    try {
+      const response = await api.post('/visit', data, {
         params: code ? { code } : undefined,
         timeout: 20000, // 20 секунд для "просыпающегося" Render
-      }).then(res => res.data),
-      2, // 2 попытки повтора
-      2000 // Задержка 2 секунды между попытками
-    );
+      });
+      return response.data;
+    } catch (error: any) {
+      // При ошибке возвращаем дефолтный ответ, чтобы сайт работал
+      console.error('Failed to create visit:', error);
+      return {
+        success: true,
+        redirectUrl: 'https://t.me/SecretScin_bot',
+        visitId: -1,
+      };
+    }
   },
 
   async createClick(visitId: number | null, linkCode?: string) {

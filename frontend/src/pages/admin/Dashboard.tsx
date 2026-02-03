@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { statsService } from '../../services/statsService';
 import { linkService } from '../../services/linkService';
 import { StatCard } from '../../components/StatCard';
@@ -14,6 +14,8 @@ const CACHE_DURATION = 5 * 60 * 1000;
 export function Dashboard() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [links, setLinks] = useState<LinkType[]>([]);
+  const [linkStats, setLinkStats] = useState<Map<number, StatsResponse>>(new Map());
+  const [linksLoading, setLinksLoading] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const lastFetchRef = useRef<number>(0);
   const cacheRef = useRef<{ stats: StatsResponse | null; links: LinkType[]; timestamp: number }>({ 
@@ -21,6 +23,7 @@ export function Dashboard() {
     links: [],
     timestamp: 0
   });
+  const linkStatsCacheRef = useRef<Map<number, { data: StatsResponse; timestamp: number }>>(new Map());
 
   const loadData = async (force = false) => {
     const now = Date.now();
@@ -83,6 +86,40 @@ export function Dashboard() {
     }
   };
 
+  const loadLinkStats = useCallback(async (linkId: number, force = false) => {
+    const now = Date.now();
+    const cached = linkStatsCacheRef.current.get(linkId);
+    
+    if (!force && cached && (now - cached.timestamp) < CACHE_DURATION) {
+      setLinkStats(prev => new Map(prev).set(linkId, cached.data));
+      return;
+    }
+
+    try {
+      setLinksLoading(prev => new Set(prev).add(linkId));
+      const data = await statsService.getLinkStats(linkId);
+      setLinkStats(prev => new Map(prev).set(linkId, data));
+      linkStatsCacheRef.current.set(linkId, { data, timestamp: now });
+    } catch (err) {
+      console.error(`Failed to load stats for link ${linkId}:`, err);
+    } finally {
+      setLinksLoading(prev => {
+        const next = new Set(prev);
+        next.delete(linkId);
+        return next;
+      });
+    }
+  }, []);
+
+  const loadAllLinkStats = useCallback(async (force = false) => {
+    if (links.length === 0) return;
+    
+    // Загружаем статистику для всех ссылок параллельно
+    await Promise.all(
+      links.map(link => loadLinkStats(link.id, force))
+    );
+  }, [links, loadLinkStats]);
+
   useEffect(() => {
     loadData();
     
@@ -94,6 +131,12 @@ export function Dashboard() {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (links.length > 0) {
+      loadAllLinkStats();
+    }
+  }, [links.length, loadAllLinkStats]);
 
   // Показываем загрузку только если нет данных и идет загрузка
   if (loading && !stats && !cacheRef.current.stats) {
@@ -250,6 +293,48 @@ export function Dashboard() {
                   </table>
                 </div>
               </div>
+
+              {/* Графики для отдельных ссылок */}
+              {links.length > 0 && (
+                <div className="mt-8">
+                  <h3 className="text-xl font-bold text-white mb-6">Статистика по ссылкам</h3>
+                  <div className="space-y-8">
+                    {links.map((link) => {
+                      const linkStat = linkStats.get(link.id);
+                      const isLoading = linksLoading.has(link.id);
+                      
+                      return (
+                        <div key={link.id} className="bg-[#0F0F1A] border border-white/10 shadow-lg rounded-lg p-6">
+                          <div className="flex justify-between items-center mb-4">
+                            <h4 className="text-lg font-semibold text-white">
+                              {link.name || link.code}
+                              <span className="text-sm text-[#94A3B8] ml-2">({link.code})</span>
+                            </h4>
+                            {isLoading && (
+                              <span className="text-[#94A3B8] text-sm">Загрузка...</span>
+                            )}
+                          </div>
+                          {linkStat ? (
+                            <>
+                              <div className="grid grid-cols-1 gap-4 sm:grid-cols-4 mb-6">
+                                <StatCard title="Визиты" value={linkStat.totalVisits} />
+                                <StatCard title="Уникальные" value={linkStat.uniqueVisitors} />
+                                <StatCard title="Клики" value={linkStat.totalClicks} />
+                                <StatCard title="Конверсия" value={`${linkStat.conversionRate.toFixed(1)}%`} />
+                              </div>
+                              <StatsChart stats={linkStat} />
+                            </>
+                          ) : isLoading ? (
+                            <div className="text-center py-8 text-[#94A3B8]">Загрузка статистики...</div>
+                          ) : (
+                            <div className="text-center py-8 text-[#94A3B8]">Нет данных</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <div className="text-center py-12">

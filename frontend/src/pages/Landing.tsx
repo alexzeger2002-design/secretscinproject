@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { visitService } from '../services';
 import { generateFingerprint, getUrlParam } from '../utils/fingerprint';
 import { LandingProvider } from '../contexts/LandingContext';
@@ -20,32 +20,83 @@ export function Landing() {
   const [linkCode, setLinkCode] = useState<string | null>(null);
   const [loading] = useState(false); // Начинаем с false, чтобы не показывать загрузку
   const [error] = useState<string | null>(null);
+  
+  // Флаг для отслеживания, был ли уже создан визит в этой сессии
+  const visitCreatedRef = useRef<boolean>(false);
+  const lastVisitAttemptRef = useRef<number>(0);
+  const VISIT_COOLDOWN = 5 * 60 * 1000; // 5 минут - защита от дубликатов
 
   // Функция для получения ссылки на бота и создания визита
-  const updateBotUrl = async () => {
+  const updateBotUrl = async (skipVisitCreation = false) => {
     try {
       const code = getUrlParam('code');
-      const fingerprint = generateFingerprint();
       
-      // Используем Promise.race для быстрого fallback если API медленный
-      const result = await Promise.race([
-        visitService.createVisit({
-          fingerprint,
-          referrer: document.referrer || undefined,
-          ua: navigator.userAgent,
-          linkCode: code || undefined,
-        }, code || undefined),
-        new Promise<{ redirectUrl: string; visitId: number }>((resolve) => 
-          setTimeout(() => resolve({ 
-            redirectUrl: redirectUrl || 'https://t.me/SecretScin_bot', 
-            visitId: -1 
-          }), 4000) // Fallback через 4 секунды - баланс между скоростью и надежностью
-        )
-      ]);
+      // Проверяем, нужно ли создавать визит
+      const now = Date.now();
+      const shouldCreateVisit = !skipVisitCreation && 
+                                !visitCreatedRef.current && 
+                                (now - lastVisitAttemptRef.current) > VISIT_COOLDOWN;
       
-      if (result?.redirectUrl) {
-        setRedirectUrl(result.redirectUrl);
+      if (shouldCreateVisit) {
+        lastVisitAttemptRef.current = now;
+        const fingerprint = generateFingerprint();
+        
+        // Создаем визит БЕЗ retry, чтобы избежать дубликатов
+        try {
+          const visitResult = await Promise.race([
+            visitService.createVisit({
+              fingerprint,
+              referrer: document.referrer || undefined,
+              ua: navigator.userAgent,
+              linkCode: code || undefined,
+            }, code || undefined),
+            new Promise<{ redirectUrl: string; visitId: number }>((resolve) => 
+              setTimeout(() => resolve({ 
+                redirectUrl: redirectUrl || 'https://t.me/SecretScin_bot', 
+                visitId: -1 
+              }), 4000) // Fallback через 4 секунды
+            )
+          ]);
+          
+          if (visitResult?.redirectUrl) {
+            setRedirectUrl(visitResult.redirectUrl);
+          }
+          
+          // Помечаем, что визит был создан (даже если visitId = -1)
+          if (visitResult?.visitId !== undefined) {
+            visitCreatedRef.current = true;
+          }
+        } catch (visitError: any) {
+          // Игнорируем ошибки создания визита - не критично
+          console.error('Failed to create visit:', visitError?.message || visitError);
+        }
+      } else if (!skipVisitCreation) {
+        // Если визит уже был создан, но нужно обновить URL
+        // Используем простой запрос без создания визита
+        try {
+          const result = await Promise.race([
+            visitService.createVisit({
+              fingerprint: generateFingerprint(),
+              referrer: document.referrer || undefined,
+              ua: navigator.userAgent,
+              linkCode: code || undefined,
+            }, code || undefined).catch(() => ({ redirectUrl: redirectUrl || 'https://t.me/SecretScin_bot', visitId: -1 })),
+            new Promise<{ redirectUrl: string; visitId: number }>((resolve) => 
+              setTimeout(() => resolve({ 
+                redirectUrl: redirectUrl || 'https://t.me/SecretScin_bot', 
+                visitId: -1 
+              }), 2000) // Быстрый fallback для обновления URL
+            )
+          ]);
+          
+          if (result?.redirectUrl) {
+            setRedirectUrl(result.redirectUrl);
+          }
+        } catch (error) {
+          // Игнорируем ошибки - не критично
+        }
       }
+      // Если skipVisitCreation = true, просто ничего не делаем (URL уже установлен)
     } catch (apiError: any) {
       console.error('Failed to get bot URL:', apiError?.message || apiError);
       // При ошибке используем текущую ссылку или дефолтную
@@ -69,13 +120,15 @@ export function Landing() {
     }, 100); // Небольшая задержка для первоначального рендера
 
     // Обновляем ссылку каждые 30 секунд (увеличено с 10 для снижения нагрузки)
+    // НЕ создаем визит при обновлении - только обновляем URL
     const interval = setInterval(() => {
-      updateBotUrl();
+      updateBotUrl(true); // skipVisitCreation = true
     }, 30000); // 30 секунд
 
     // Обновляем ссылку при возврате фокуса на страницу (когда пользователь возвращается на вкладку)
+    // НЕ создаем визит при возврате фокуса - только обновляем URL
     const handleFocus = () => {
-      updateBotUrl();
+      updateBotUrl(true); // skipVisitCreation = true
     };
     window.addEventListener('focus', handleFocus);
 

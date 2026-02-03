@@ -1,4 +1,11 @@
 export function generateFingerprint(): string {
+  // Проверяем, есть ли уже сохраненный fingerprint в sessionStorage
+  const storedFingerprint = sessionStorage.getItem('browserFingerprint');
+  if (storedFingerprint) {
+    return storedFingerprint;
+  }
+
+  // Генерируем новый fingerprint только если его нет
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   if (ctx) {
@@ -23,7 +30,12 @@ export function generateFingerprint(): string {
     hash = hash & hash;
   }
   
-  return `fp_${Math.abs(hash)}`;
+  const fingerprintHash = `fp_${Math.abs(hash)}`;
+  
+  // Сохраняем в sessionStorage для этой сессии
+  sessionStorage.setItem('browserFingerprint', fingerprintHash);
+  
+  return fingerprintHash;
 }
 
 export function getUrlParam(param: string): string | null {

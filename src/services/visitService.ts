@@ -144,9 +144,45 @@ export class VisitService {
 
     // Пытаемся создать визит с таймаутом
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/85d3f238-c3aa-4cf2-9251-09dd60155ef0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'visitService.ts:145',message:'Creating visit - before DB insert',data:{linkId,isSuspicious,fingerprint:data.fingerprint.substring(0,20)+'...',hasLinkCode:!!data.linkCode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
+      // Проверяем, не был ли уже создан визит с таким fingerprint и linkId за последние 5 минут
+      // Это защита от дубликатов
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      let existingVisit = null;
+      
+      try {
+        existingVisit = await Promise.race([
+          prisma.visit.findFirst({
+            where: {
+              browserFingerprint: data.fingerprint,
+              linkId: linkId || null,
+              timestamp: {
+                gte: fiveMinutesAgo,
+              },
+            },
+            orderBy: {
+              timestamp: 'desc',
+            },
+            select: {
+              id: true,
+              isSuspicious: true,
+              linkId: true,
+            },
+          }),
+          new Promise<any>((resolve) => setTimeout(() => resolve(null), 2000))
+        ]);
+      } catch (error) {
+        // Игнорируем ошибки проверки - продолжаем создание
+        console.error('Error checking for duplicate visit:', error);
+      }
+
+      // Если нашли существующий визит - возвращаем его
+      if (existingVisit) {
+        return {
+          id: existingVisit.id,
+          isSuspicious: existingVisit.isSuspicious,
+          linkId: existingVisit.linkId,
+        };
+      }
 
       const visit = await Promise.race([
         prisma.visit.create({
@@ -165,10 +201,6 @@ export class VisitService {
           setTimeout(() => reject(new Error('Database timeout')), 5000)
         )
       ]);
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/85d3f238-c3aa-4cf2-9251-09dd60155ef0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'visitService.ts:165',message:'Visit created successfully',data:{visitId:visit.id,isSuspicious:visit.isSuspicious,linkId:visit.linkId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
 
       return {
         id: visit.id,
