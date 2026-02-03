@@ -15,8 +15,10 @@ const CACHE_DURATION = 5 * 60 * 1000;
 export function StatsPage() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [links, setLinks] = useState<LinkType[]>([]);
+  const [linkStats, setLinkStats] = useState<Map<number, StatsResponse>>(new Map());
   const [selectedLinkId, setSelectedLinkId] = useState<number | undefined>();
   const [loading, setLoading] = useState(true);
+  const [linksLoading, setLinksLoading] = useState<Set<number>>(new Set());
   const [filters, setFilters] = useState({
     startDate: '',
     endDate: '',
@@ -28,6 +30,7 @@ export function StatsPage() {
     data: null,
     timestamp: 0
   });
+  const linkStatsCacheRef = useRef<Map<number, { data: StatsResponse; timestamp: number }>>(new Map());
 
   useEffect(() => {
     loadLinks();
@@ -35,14 +38,23 @@ export function StatsPage() {
 
   useEffect(() => {
     loadData();
+    loadAllLinkStats();
     
     // Автоматическое обновление каждые 5 минут
     const interval = setInterval(() => {
       loadData(true);
+      loadAllLinkStats(true);
     }, CACHE_DURATION);
 
     return () => clearInterval(interval);
-  }, [selectedLinkId, filters]);
+  }, [filters]);
+
+  useEffect(() => {
+    // Загружаем статистику для конкретной ссылки при выборе
+    if (selectedLinkId) {
+      loadLinkStats(selectedLinkId);
+    }
+  }, [selectedLinkId]);
 
   const loadData = async (force = false) => {
     const cacheKey = `${selectedLinkId || 'all'}-${filters.startDate}-${filters.endDate}-${filters.country}`;
@@ -86,6 +98,41 @@ export function StatsPage() {
     } catch (err) {
       console.error('Failed to load links:', err);
     }
+  };
+
+  const loadLinkStats = async (linkId: number, force = false) => {
+    const cacheKey = `${linkId}-${filters.startDate}-${filters.endDate}-${filters.country}`;
+    const now = Date.now();
+    const cached = linkStatsCacheRef.current.get(linkId);
+    
+    if (!force && cached && (now - cached.timestamp) < CACHE_DURATION) {
+      setLinkStats(prev => new Map(prev).set(linkId, cached.data));
+      return;
+    }
+
+    try {
+      setLinksLoading(prev => new Set(prev).add(linkId));
+      const data = await statsService.getLinkStats(linkId, filters);
+      setLinkStats(prev => new Map(prev).set(linkId, data));
+      linkStatsCacheRef.current.set(linkId, { data, timestamp: now });
+    } catch (err) {
+      console.error(`Failed to load stats for link ${linkId}:`, err);
+    } finally {
+      setLinksLoading(prev => {
+        const next = new Set(prev);
+        next.delete(linkId);
+        return next;
+      });
+    }
+  };
+
+  const loadAllLinkStats = async (force = false) => {
+    if (links.length === 0) return;
+    
+    // Загружаем статистику для всех ссылок параллельно
+    await Promise.all(
+      links.map(link => loadLinkStats(link.id, force))
+    );
   };
 
   const handleExportCSV = async () => {
@@ -201,7 +248,7 @@ export function StatsPage() {
             </div>
           </div>
 
-          {stats && (
+          {stats && !selectedLinkId && (
             <>
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
                 <StatCard title="Всего визитов" value={stats.totalVisits} />
@@ -212,6 +259,61 @@ export function StatsPage() {
 
               <StatsChart stats={stats} />
             </>
+          )}
+
+          {selectedLinkId && linkStats.has(selectedLinkId) && (
+            <>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+                <StatCard title="Всего визитов" value={linkStats.get(selectedLinkId)!.totalVisits} />
+                <StatCard title="Уникальных посетителей" value={linkStats.get(selectedLinkId)!.uniqueVisitors} />
+                <StatCard title="Кликов" value={linkStats.get(selectedLinkId)!.totalClicks} />
+                <StatCard title="Конверсия" value={`${linkStats.get(selectedLinkId)!.conversionRate.toFixed(1)}%`} />
+              </div>
+
+              <StatsChart stats={linkStats.get(selectedLinkId)!} />
+            </>
+          )}
+
+          {/* Отдельные графики для каждой ссылки */}
+          {!selectedLinkId && links.length > 0 && (
+            <div className="mt-8">
+              <h3 className="text-xl font-bold text-white mb-6">Статистика по ссылкам</h3>
+              <div className="space-y-8">
+                {links.map((link) => {
+                  const linkStat = linkStats.get(link.id);
+                  const isLoading = linksLoading.has(link.id);
+                  
+                  return (
+                    <div key={link.id} className="bg-[#0F0F1A] border border-white/10 shadow-lg rounded-lg p-6">
+                      <div className="flex justify-between items-center mb-4">
+                        <h4 className="text-lg font-semibold text-white">
+                          {link.name || link.code}
+                          <span className="text-sm text-[#94A3B8] ml-2">({link.code})</span>
+                        </h4>
+                        {isLoading && (
+                          <span className="text-[#94A3B8] text-sm">Загрузка...</span>
+                        )}
+                      </div>
+                      {linkStat ? (
+                        <>
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4 mb-6">
+                            <StatCard title="Визиты" value={linkStat.totalVisits} />
+                            <StatCard title="Уникальные" value={linkStat.uniqueVisitors} />
+                            <StatCard title="Клики" value={linkStat.totalClicks} />
+                            <StatCard title="Конверсия" value={`${linkStat.conversionRate.toFixed(1)}%`} />
+                          </div>
+                          <StatsChart stats={linkStat} />
+                        </>
+                      ) : isLoading ? (
+                        <div className="text-center py-8 text-[#94A3B8]">Загрузка статистики...</div>
+                      ) : (
+                        <div className="text-center py-8 text-[#94A3B8]">Нет данных</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       </main>

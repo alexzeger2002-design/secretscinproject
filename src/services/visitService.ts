@@ -144,6 +144,10 @@ export class VisitService {
 
     // Пытаемся создать визит с таймаутом
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/85d3f238-c3aa-4cf2-9251-09dd60155ef0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'visitService.ts:145',message:'Creating visit - before DB insert',data:{linkId,isSuspicious,fingerprint:data.fingerprint.substring(0,20)+'...',hasLinkCode:!!data.linkCode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+
       const visit = await Promise.race([
         prisma.visit.create({
           data: {
@@ -161,6 +165,10 @@ export class VisitService {
           setTimeout(() => reject(new Error('Database timeout')), 5000)
         )
       ]);
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/85d3f238-c3aa-4cf2-9251-09dd60155ef0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'visitService.ts:165',message:'Visit created successfully',data:{visitId:visit.id,isSuspicious:visit.isSuspicious,linkId:visit.linkId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
 
       return {
         id: visit.id,

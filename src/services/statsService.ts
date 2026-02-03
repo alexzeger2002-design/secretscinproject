@@ -97,34 +97,37 @@ export class StatsService {
       whereClause.country = filters.country;
     }
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/85d3f238-c3aa-4cf2-9251-09dd60155ef0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'statsService.ts:84',message:'Stats query - whereClause before clean stats filter',data:{whereClause:JSON.stringify(whereClause),filters:JSON.stringify(filters)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
+    // Исключаем подозрительные визиты и click-tracked из чистой статистики
+    whereClause.isSuspicious = false;
+    whereClause.browserFingerprint = { not: 'click-tracked' };
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/85d3f238-c3aa-4cf2-9251-09dd60155ef0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'statsService.ts:92',message:'Stats query - whereClause after clean stats filter',data:{whereClause:JSON.stringify(whereClause)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
     // Для правильного подсчета кликов с учетом фильтров визитов
-    // Если есть фильтры по визитам (дата/страна), нужно получить visitIds для правильного подсчета кликов
-    const hasVisitFilters = !!(filters && (filters.startDate || filters.endDate || filters.country || filters.linkId));
+    // Всегда фильтруем клики только от чистых (не подозрительных) визитов
+    // Получаем visitIds для правильного подсчета кликов
+    const filteredVisitIds = await prisma.visit.findMany({
+      where: whereClause,
+      select: { id: true },
+    }).then(visits => visits.map(v => v.id));
     
-    // Получаем visitIds заранее, если нужны фильтры
     let clickWhereClause: Record<string, any> = {};
-    if (hasVisitFilters) {
-      // Получаем visitIds по фильтрам для правильного подсчета кликов
-      const filteredVisitIds = await prisma.visit.findMany({
-        where: whereClause,
-        select: { id: true },
-      }).then(visits => visits.map(v => v.id));
-      
-      if (filteredVisitIds.length > 0) {
-        // Фильтруем клики только для этих визитов
-        clickWhereClause.visitId = { in: filteredVisitIds };
-        if (filters?.linkId) {
-          clickWhereClause.linkId = filters.linkId;
-        }
-      } else {
-        // Нет визитов, соответствующих фильтрам = нет кликов
-        clickWhereClause.visitId = { in: [] };
+    if (filteredVisitIds.length > 0) {
+      // Фильтруем клики только для чистых визитов
+      clickWhereClause.visitId = { in: filteredVisitIds };
+      if (filters?.linkId) {
+        clickWhereClause.linkId = filters.linkId;
       }
-    } else if (filters?.linkId) {
-      // Только фильтр по linkId без фильтров визитов
-      clickWhereClause.linkId = filters.linkId;
+    } else {
+      // Нет визитов, соответствующих фильтрам = нет кликов
+      clickWhereClause.visitId = { in: [] };
     }
-    // Если нет фильтров вообще - clickWhereClause остается пустым (все клики)
 
     let totalVisits = 0;
     let uniqueVisitors = 0;
@@ -135,6 +138,14 @@ export class StatsService {
     let clicksByDate: Array<{ date: string; count: number }> = [];
 
     try {
+      // #region agent log
+      const totalVisitsBeforeFilter = await prisma.visit.count({ where: {} }).catch(() => 0);
+      const suspiciousVisitsCount = await prisma.visit.count({ where: { isSuspicious: true } }).catch(() => 0);
+      const clickTrackedCount = await prisma.visit.count({ where: { browserFingerprint: 'click-tracked' } }).catch(() => 0);
+      const nullLinkIdCount = await prisma.visit.count({ where: { linkId: null } }).catch(() => 0);
+      fetch('http://127.0.0.1:7242/ingest/85d3f238-c3aa-4cf2-9251-09dd60155ef0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'statsService.ts:137',message:'Visit counts breakdown before filtering',data:{totalVisitsBeforeFilter,suspiciousVisitsCount,clickTrackedCount,nullLinkIdCount},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+
       // Используем Promise.allSettled вместо Promise.all, чтобы ошибки в одном запросе не блокировали остальные
       const results = await Promise.allSettled([
         // Общее количество визитов
@@ -198,6 +209,10 @@ export class StatsService {
       totalVisits = results[0].status === 'fulfilled' ? results[0].value : 0;
       uniqueVisitors = results[1].status === 'fulfilled' ? results[1].value : 0;
       totalClicks = results[2].status === 'fulfilled' ? results[2].value : 0;
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/85d3f238-c3aa-4cf2-9251-09dd60155ef0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'statsService.ts:200',message:'Stats calculation results',data:{totalVisits,uniqueVisitors,totalClicks,hasFilters:!!filters},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       countryStats = results[3].status === 'fulfilled' ? results[3].value : [];
       countriesByIP = results[4].status === 'fulfilled' ? results[4].value : [];
       visitsByDate = results[5].status === 'fulfilled' ? results[5].value : [];
