@@ -1,4 +1,4 @@
-import axios, { InternalAxiosRequestConfig } from 'axios';
+import axios from 'axios';
 
 // В development используем proxy, в production - переменную окружения
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -12,7 +12,7 @@ const api = axios.create({
 });
 
 // Добавление токена к запросам
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+api.interceptors.request.use((config) => {
   const requestUrl = config.url || '';
   // Публичные роуты не требуют токена
   const isPublicRoute = requestUrl.includes('/stats') && !requestUrl.includes('/stats/link/') ||
@@ -23,7 +23,7 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   // Добавляем токен только для защищенных роутов
   if (!isPublicRoute) {
     const token = localStorage.getItem('authToken');
-    if (token && config.headers) {
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
   }

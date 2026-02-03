@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { statsService } from '../../services/statsService';
 import { linkService } from '../../services/linkService';
 import { StatCard } from '../../components/StatCard';
@@ -22,7 +22,7 @@ export function Dashboard() {
     timestamp: 0
   });
 
-  const loadData = useCallback(async (force = false) => {
+  const loadData = async (force = false) => {
     const now = Date.now();
     const timeSinceLastFetch = now - cacheRef.current.timestamp;
 
@@ -81,7 +81,7 @@ export function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     loadData();
@@ -92,7 +92,8 @@ export function Dashboard() {
     }, CACHE_DURATION);
 
     return () => clearInterval(interval);
-  }, [loadData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Показываем загрузку только если нет данных и идет загрузка
   if (loading && !stats && !cacheRef.current.stats) {
