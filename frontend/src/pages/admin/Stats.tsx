@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { statsService } from '../../services/statsService';
 import { linkService } from '../../services/linkService';
 import { exportService } from '../../services/exportService';
@@ -117,7 +117,7 @@ export function StatsPage() {
     if (links.length > 0) {
       loadAllLinkStats();
     }
-  }, [links, loadAllLinkStats]);
+  }, [links.length, loadAllLinkStats]);
 
   useEffect(() => {
     loadData();
@@ -131,7 +131,7 @@ export function StatsPage() {
     }, CACHE_DURATION);
 
     return () => clearInterval(interval);
-  }, [filters, loadData, links, loadAllLinkStats]);
+  }, [filters, selectedLinkId, loadData, loadAllLinkStats]);
 
   useEffect(() => {
     // Загружаем статистику для конкретной ссылки при выборе
@@ -139,6 +139,12 @@ export function StatsPage() {
       loadLinkStats(selectedLinkId);
     }
   }, [selectedLinkId, loadLinkStats]);
+
+  // Мемоизируем выбранную статистику для избежания IIFE в JSX
+  const selectedLinkStats = useMemo(() => {
+    if (!selectedLinkId) return null;
+    return linkStats.get(selectedLinkId) || null;
+  }, [selectedLinkId, linkStats.size, linkStats]);
 
 
   const handleExportCSV = async () => {
@@ -267,22 +273,18 @@ export function StatsPage() {
             </>
           )}
 
-          {selectedLinkId && (() => {
-            const selectedStats = linkStats.get(selectedLinkId);
-            if (!selectedStats) return null;
-            return (
-              <>
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-                  <StatCard title="Всего визитов" value={selectedStats.totalVisits} />
-                  <StatCard title="Уникальных посетителей" value={selectedStats.uniqueVisitors} />
-                  <StatCard title="Кликов" value={selectedStats.totalClicks} />
-                  <StatCard title="Конверсия" value={`${selectedStats.conversionRate.toFixed(1)}%`} />
-                </div>
+          {selectedLinkId && selectedLinkStats && (
+            <>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+                <StatCard title="Всего визитов" value={selectedLinkStats.totalVisits} />
+                <StatCard title="Уникальных посетителей" value={selectedLinkStats.uniqueVisitors} />
+                <StatCard title="Кликов" value={selectedLinkStats.totalClicks} />
+                <StatCard title="Конверсия" value={`${selectedLinkStats.conversionRate.toFixed(1)}%`} />
+              </div>
 
-                <StatsChart stats={selectedStats} />
-              </>
-            );
-          })()}
+              <StatsChart stats={selectedLinkStats} />
+            </>
+          )}
 
           {/* Отдельные графики для каждой ссылки */}
           {!selectedLinkId && links.length > 0 && (
