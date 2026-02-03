@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { statsService } from '../../services/statsService';
 import { linkService } from '../../services/linkService';
 import { exportService } from '../../services/exportService';
@@ -24,7 +24,6 @@ export function StatsPage() {
     endDate: '',
     country: '',
   });
-  const lastFetchRef = useRef<number>(0);
   const cacheKeyRef = useRef<string>('');
   const cacheRef = useRef<{ data: StatsResponse | null; timestamp: number }>({ 
     data: null,
@@ -32,75 +31,7 @@ export function StatsPage() {
   });
   const linkStatsCacheRef = useRef<Map<number, { data: StatsResponse; timestamp: number }>>(new Map());
 
-  useEffect(() => {
-    loadLinks();
-  }, []);
-
-  useEffect(() => {
-    loadData();
-    loadAllLinkStats();
-    
-    // Автоматическое обновление каждые 5 минут
-    const interval = setInterval(() => {
-      loadData(true);
-      loadAllLinkStats(true);
-    }, CACHE_DURATION);
-
-    return () => clearInterval(interval);
-  }, [filters]);
-
-  useEffect(() => {
-    // Загружаем статистику для конкретной ссылки при выборе
-    if (selectedLinkId) {
-      loadLinkStats(selectedLinkId);
-    }
-  }, [selectedLinkId]);
-
-  const loadData = async (force = false) => {
-    const cacheKey = `${selectedLinkId || 'all'}-${filters.startDate}-${filters.endDate}-${filters.country}`;
-    const now = Date.now();
-    const timeSinceLastFetch = now - cacheRef.current.timestamp;
-
-    // Используем кеш если данные свежие и ключ совпадает
-    if (!force && timeSinceLastFetch < CACHE_DURATION && cacheKeyRef.current === cacheKey && cacheRef.current.data) {
-      setStats(cacheRef.current.data);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      let data: StatsResponse;
-      if (selectedLinkId) {
-        data = await statsService.getLinkStats(selectedLinkId, filters);
-      } else {
-        data = await statsService.getStats(filters);
-      }
-      setStats(data);
-      cacheRef.current = { data, timestamp: now };
-      cacheKeyRef.current = cacheKey;
-      lastFetchRef.current = now;
-    } catch (err) {
-      console.error('Failed to load stats:', err);
-      // При ошибке используем кеш
-      if (cacheRef.current.data) {
-        setStats(cacheRef.current.data);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadLinks = async () => {
-    try {
-      const data = await linkService.getAll();
-      setLinks(data);
-    } catch (err) {
-      console.error('Failed to load links:', err);
-    }
-  };
-
-  const loadLinkStats = async (linkId: number, force = false) => {
+  const loadLinkStats = useCallback(async (linkId: number, force = false) => {
     const cacheKey = `${linkId}-${filters.startDate}-${filters.endDate}-${filters.country}`;
     const now = Date.now();
     const cached = linkStatsCacheRef.current.get(linkId);
@@ -124,16 +55,91 @@ export function StatsPage() {
         return next;
       });
     }
-  };
+  }, [filters]);
 
-  const loadAllLinkStats = async (force = false) => {
+  const loadAllLinkStats = useCallback(async (force = false) => {
     if (links.length === 0) return;
     
     // Загружаем статистику для всех ссылок параллельно
     await Promise.all(
       links.map(link => loadLinkStats(link.id, force))
     );
-  };
+  }, [links, loadLinkStats]);
+
+  const loadData = useCallback(async (force = false) => {
+    const cacheKey = `${selectedLinkId || 'all'}-${filters.startDate}-${filters.endDate}-${filters.country}`;
+    const now = Date.now();
+    const timeSinceLastFetch = now - cacheRef.current.timestamp;
+
+    // Используем кеш если данные свежие и ключ совпадает
+    if (!force && timeSinceLastFetch < CACHE_DURATION && cacheKeyRef.current === cacheKey && cacheRef.current.data) {
+      setStats(cacheRef.current.data);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      let data: StatsResponse;
+      if (selectedLinkId) {
+        data = await statsService.getLinkStats(selectedLinkId, filters);
+      } else {
+        data = await statsService.getStats(filters);
+      }
+      setStats(data);
+      cacheRef.current = { data, timestamp: now };
+      cacheKeyRef.current = cacheKey;
+    } catch (err) {
+      console.error('Failed to load stats:', err);
+      // При ошибке используем кеш
+      if (cacheRef.current.data) {
+        setStats(cacheRef.current.data);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedLinkId, filters]);
+
+  const loadLinks = useCallback(async () => {
+    try {
+      const data = await linkService.getAll();
+      setLinks(data);
+    } catch (err) {
+      console.error('Failed to load links:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLinks();
+  }, [loadLinks]);
+
+  useEffect(() => {
+    if (links.length > 0) {
+      loadAllLinkStats();
+    }
+  }, [links, loadAllLinkStats]);
+
+  useEffect(() => {
+    loadData();
+    
+    // Автоматическое обновление каждые 5 минут
+    const interval = setInterval(() => {
+      loadData(true);
+      if (links.length > 0) {
+        loadAllLinkStats(true);
+      }
+    }, CACHE_DURATION);
+
+    return () => clearInterval(interval);
+  }, [filters, loadData, links, loadAllLinkStats]);
+
+  useEffect(() => {
+    // Загружаем статистику для конкретной ссылки при выборе
+    if (selectedLinkId) {
+      loadLinkStats(selectedLinkId);
+    }
+  }, [selectedLinkId, loadLinkStats]);
+
 
   const handleExportCSV = async () => {
     try {
@@ -261,18 +267,22 @@ export function StatsPage() {
             </>
           )}
 
-          {selectedLinkId && linkStats.has(selectedLinkId) && (
-            <>
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-                <StatCard title="Всего визитов" value={linkStats.get(selectedLinkId)!.totalVisits} />
-                <StatCard title="Уникальных посетителей" value={linkStats.get(selectedLinkId)!.uniqueVisitors} />
-                <StatCard title="Кликов" value={linkStats.get(selectedLinkId)!.totalClicks} />
-                <StatCard title="Конверсия" value={`${linkStats.get(selectedLinkId)!.conversionRate.toFixed(1)}%`} />
-              </div>
+          {selectedLinkId && (() => {
+            const selectedStats = linkStats.get(selectedLinkId);
+            if (!selectedStats) return null;
+            return (
+              <>
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+                  <StatCard title="Всего визитов" value={selectedStats.totalVisits} />
+                  <StatCard title="Уникальных посетителей" value={selectedStats.uniqueVisitors} />
+                  <StatCard title="Кликов" value={selectedStats.totalClicks} />
+                  <StatCard title="Конверсия" value={`${selectedStats.conversionRate.toFixed(1)}%`} />
+                </div>
 
-              <StatsChart stats={linkStats.get(selectedLinkId)!} />
-            </>
-          )}
+                <StatsChart stats={selectedStats} />
+              </>
+            );
+          })()}
 
           {/* Отдельные графики для каждой ссылки */}
           {!selectedLinkId && links.length > 0 && (
