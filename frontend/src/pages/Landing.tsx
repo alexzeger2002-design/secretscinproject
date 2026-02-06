@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, lazy, Suspense } from 'react';
+import { useEffect, useLayoutEffect, useState, useRef, lazy, Suspense } from 'react';
 import { visitService } from '../services';
 import { settingsService } from '../services/settingsService';
 import { generateFingerprint, getUrlParam } from '../utils/fingerprint';
@@ -15,11 +15,12 @@ const Steps = lazy(() => import('../components/sections/Steps').then(m => ({ def
 const FinalCTA = lazy(() => import('../components/sections/FinalCTA').then(m => ({ default: m.FinalCTA })));
 
 export function Landing() {
-  // Начинаем с дефолтного значения, но сразу загрузим правильную ссылку
-  const [redirectUrl, setRedirectUrl] = useState<string | null>('https://t.me/SecretScin_bot');
+  // НЕ устанавливаем дефолтное значение - загрузим правильную ссылку сразу
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+  const [urlLoading, setUrlLoading] = useState<boolean>(true); // Флаг загрузки ссылки
   const [visitId, setVisitId] = useState<number | null>(null);
   const [linkCode, setLinkCode] = useState<string | null>(null);
-  const [loading] = useState(false); // Начинаем с false, чтобы не показывать загрузку
+  const [loading] = useState(false);
   const [error] = useState<string | null>(null);
   
   // Флаг для отслеживания, был ли уже создан визит в этой сессии
@@ -32,9 +33,14 @@ export function Landing() {
     try {
       const url = await settingsService.getTelegramBotUrlPublic();
       setRedirectUrl(url);
+      setUrlLoading(false);
     } catch (error: any) {
       console.error('Failed to load bot URL:', error);
-      // При ошибке оставляем текущую ссылку (не меняем на дефолтную, если уже установлена)
+      // При ошибке используем дефолтную ссылку только если ссылка еще не была загружена
+      if (redirectUrl === null) {
+        setRedirectUrl('https://t.me/SecretScin_bot');
+      }
+      setUrlLoading(false);
     }
   };
 
@@ -77,19 +83,22 @@ export function Landing() {
     }
   };
 
-  useEffect(() => {
+  // Загружаем ссылку ДО рендера (useLayoutEffect выполняется синхронно перед рендером)
+  useLayoutEffect(() => {
     const code = getUrlParam('code');
     if (code) setLinkCode(code);
 
-    // Сразу загружаем правильную ссылку (без создания визита)
-    // Это гарантирует, что пользователь увидит правильную ссылку как можно быстрее
+    // Загружаем правильную ссылку СРАЗУ - это выполнится до рендера компонентов
     loadBotUrl();
+  }, []);
 
-    // Затем создаем визит в фоне для статистики (не блокирует UI)
-    // Используем небольшую задержку, чтобы не нагружать сервер сразу
-    const visitTimeoutId = setTimeout(() => {
-      createVisitInBackground();
-    }, 1000); // 1 секунда задержка для создания визита (не критично для UI)
+  useEffect(() => {
+    // После загрузки ссылки создаем визит в фоне для статистики
+    if (redirectUrl && !visitCreatedRef.current) {
+      setTimeout(() => {
+        createVisitInBackground();
+      }, 500);
+    }
 
     // Обновляем ссылку каждые 30 секунд (на случай, если админ изменил её)
     const interval = setInterval(() => {
@@ -103,12 +112,11 @@ export function Landing() {
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      clearTimeout(visitTimeoutId);
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Пустой массив зависимостей - выполняется только при монтировании
+  }, [redirectUrl]); // Зависимость от redirectUrl - выполнится после загрузки ссылки
 
   const handleTelegramClick = async () => {
     // Всегда пытаемся зарегистрировать клик, даже если visitId = -1

@@ -130,7 +130,8 @@ export function Chat() {
     }
   };
 
-  const finalHref = landingContext?.redirectUrl || global.botUrl;
+  // Используем ссылку из контекста, если она загружена, иначе не показываем кнопку
+  const finalHref = landingContext?.redirectUrl || null;
 
   useEffect(() => {
     const messages = chat.messages as Message[];
@@ -210,7 +211,7 @@ export function Chat() {
                     </div>
                   )}
 
-                  {message.type === 'button' && (
+                  {message.type === 'button' && finalHref && (
                     <div className="w-full">
                       <div className="mb-4 px-4 py-2.5 bg-purple-900/40 text-white border border-purple-500/20 rounded-2xl rounded-tl-none text-sm">
                         {message.content}
