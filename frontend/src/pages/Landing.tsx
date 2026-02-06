@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { visitService } from '../services';
+import { settingsService } from '../services/settingsService';
 import { generateFingerprint, getUrlParam } from '../utils/fingerprint';
 import { LandingProvider } from '../contexts/LandingContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
@@ -14,9 +15,9 @@ const Steps = lazy(() => import('../components/sections/Steps').then(m => ({ def
 const FinalCTA = lazy(() => import('../components/sections/FinalCTA').then(m => ({ default: m.FinalCTA })));
 
 export function Landing() {
-  // Устанавливаем дефолтный URL сразу, чтобы не показывать загрузку
+  // Начинаем с дефолтного значения, но сразу загрузим правильную ссылку
   const [redirectUrl, setRedirectUrl] = useState<string | null>('https://t.me/SecretScin_bot');
-  const [visitId] = useState<number | null>(null);
+  const [visitId, setVisitId] = useState<number | null>(null);
   const [linkCode, setLinkCode] = useState<string | null>(null);
   const [loading] = useState(false); // Начинаем с false, чтобы не показывать загрузку
   const [error] = useState<string | null>(null);
@@ -26,114 +27,83 @@ export function Landing() {
   const lastVisitAttemptRef = useRef<number>(0);
   const VISIT_COOLDOWN = 5 * 60 * 1000; // 5 минут - защита от дубликатов
 
-  // Функция для получения ссылки на бота и создания визита
-  const updateBotUrl = async (skipVisitCreation = false) => {
+  // Функция для быстрого получения ссылки на бота (без создания визита)
+  const loadBotUrl = async () => {
+    try {
+      const url = await settingsService.getTelegramBotUrlPublic();
+      setRedirectUrl(url);
+    } catch (error: any) {
+      console.error('Failed to load bot URL:', error);
+      // При ошибке оставляем текущую ссылку (не меняем на дефолтную, если уже установлена)
+    }
+  };
+
+  // Функция для создания визита в фоне (для статистики)
+  const createVisitInBackground = async () => {
     try {
       const code = getUrlParam('code');
+      const now = Date.now();
       
       // Проверяем, нужно ли создавать визит
-      const now = Date.now();
-      const shouldCreateVisit = !skipVisitCreation && 
-                                !visitCreatedRef.current && 
+      const shouldCreateVisit = !visitCreatedRef.current && 
                                 (now - lastVisitAttemptRef.current) > VISIT_COOLDOWN;
       
-      if (shouldCreateVisit) {
-        lastVisitAttemptRef.current = now;
-        const fingerprint = generateFingerprint();
+      if (!shouldCreateVisit) {
+        return;
+      }
+
+      lastVisitAttemptRef.current = now;
+      const fingerprint = generateFingerprint();
+      
+      // Создаем визит в фоне, не блокируя UI
+      try {
+        const visitResult = await visitService.createVisit({
+          fingerprint,
+          referrer: document.referrer || undefined,
+          ua: navigator.userAgent,
+          linkCode: code || undefined,
+        }, code || undefined);
         
-        // Создаем визит БЕЗ retry, чтобы избежать дубликатов
-        try {
-          const visitResult = await Promise.race([
-            visitService.createVisit({
-              fingerprint,
-              referrer: document.referrer || undefined,
-              ua: navigator.userAgent,
-              linkCode: code || undefined,
-            }, code || undefined),
-            new Promise<{ redirectUrl: string; visitId: number }>((resolve) => 
-              setTimeout(() => resolve({ 
-                redirectUrl: redirectUrl || 'https://t.me/SecretScin_bot', 
-                visitId: -1 
-              }), 4000) // Fallback через 4 секунды
-            )
-          ]);
-          
-          if (visitResult?.redirectUrl) {
-            setRedirectUrl(visitResult.redirectUrl);
-          }
-          
-          // Помечаем, что визит был создан (даже если visitId = -1)
-          if (visitResult?.visitId !== undefined) {
-            visitCreatedRef.current = true;
-          }
-        } catch (visitError: any) {
-          // Игнорируем ошибки создания визита - не критично
-          console.error('Failed to create visit:', visitError?.message || visitError);
+        if (visitResult?.visitId !== undefined && visitResult.visitId !== -1) {
+          setVisitId(visitResult.visitId);
+          visitCreatedRef.current = true;
         }
-      } else if (!skipVisitCreation) {
-        // Если визит уже был создан, но нужно обновить URL
-        // Используем простой запрос без создания визита
-        try {
-          const result = await Promise.race([
-            visitService.createVisit({
-              fingerprint: generateFingerprint(),
-              referrer: document.referrer || undefined,
-              ua: navigator.userAgent,
-              linkCode: code || undefined,
-            }, code || undefined).catch(() => ({ redirectUrl: redirectUrl || 'https://t.me/SecretScin_bot', visitId: -1 })),
-            new Promise<{ redirectUrl: string; visitId: number }>((resolve) => 
-              setTimeout(() => resolve({ 
-                redirectUrl: redirectUrl || 'https://t.me/SecretScin_bot', 
-                visitId: -1 
-              }), 2000) // Быстрый fallback для обновления URL
-            )
-          ]);
-          
-          if (result?.redirectUrl) {
-            setRedirectUrl(result.redirectUrl);
-          }
-        } catch (error) {
-          // Игнорируем ошибки - не критично
-        }
+      } catch (visitError: any) {
+        // Игнорируем ошибки создания визита - не критично для работы сайта
+        console.error('Failed to create visit:', visitError?.message || visitError);
       }
-      // Если skipVisitCreation = true, просто ничего не делаем (URL уже установлен)
-    } catch (apiError: any) {
-      console.error('Failed to get bot URL:', apiError?.message || apiError);
-      // При ошибке используем текущую ссылку или дефолтную
-      if (!redirectUrl) {
-        setRedirectUrl('https://t.me/SecretScin_bot');
-      }
+    } catch (error: any) {
+      console.error('Error in createVisitInBackground:', error);
     }
   };
 
   useEffect(() => {
-    // Страница уже загружена с дефолтным URL - мгновенная загрузка!
     const code = getUrlParam('code');
     if (code) setLinkCode(code);
 
-    // Первоначальная загрузка ссылки - с задержкой чтобы не блокировать рендер
-    // Визит создается автоматически на бэкенде при запросе ссылки через updateBotUrl
-    // НЕ создаем визит отдельно, чтобы избежать дублирования
-    // Используем setTimeout чтобы не блокировать первоначальный рендер
-    const timeoutId = setTimeout(() => {
-      updateBotUrl();
-    }, 100); // Небольшая задержка для первоначального рендера
+    // Сразу загружаем правильную ссылку (без создания визита)
+    // Это гарантирует, что пользователь увидит правильную ссылку как можно быстрее
+    loadBotUrl();
 
-    // Обновляем ссылку каждые 30 секунд (увеличено с 10 для снижения нагрузки)
-    // НЕ создаем визит при обновлении - только обновляем URL
+    // Затем создаем визит в фоне для статистики (не блокирует UI)
+    // Используем небольшую задержку, чтобы не нагружать сервер сразу
+    const visitTimeoutId = setTimeout(() => {
+      createVisitInBackground();
+    }, 1000); // 1 секунда задержка для создания визита (не критично для UI)
+
+    // Обновляем ссылку каждые 30 секунд (на случай, если админ изменил её)
     const interval = setInterval(() => {
-      updateBotUrl(true); // skipVisitCreation = true
+      loadBotUrl();
     }, 30000); // 30 секунд
 
-    // Обновляем ссылку при возврате фокуса на страницу (когда пользователь возвращается на вкладку)
-    // НЕ создаем визит при возврате фокуса - только обновляем URL
+    // Обновляем ссылку при возврате фокуса на страницу
     const handleFocus = () => {
-      updateBotUrl(true); // skipVisitCreation = true
+      loadBotUrl();
     };
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      clearTimeout(timeoutId);
+      clearTimeout(visitTimeoutId);
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };
