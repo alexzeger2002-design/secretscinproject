@@ -18,7 +18,8 @@ api.interceptors.request.use((config) => {
   const isPublicRoute = requestUrl.includes('/stats') && !requestUrl.includes('/stats/link/') ||
                          requestUrl.includes('/visit') ||
                          requestUrl.includes('/click') ||
-                         requestUrl === '/admin/login';
+                         requestUrl === '/admin/login' ||
+                         requestUrl.includes('/admin/settings/telegram-bot-url/public');
   
   // Добавляем токен только для защищенных роутов
   if (!isPublicRoute) {
@@ -43,7 +44,8 @@ api.interceptors.response.use(
     const isPublicRoute = requestUrl.includes('/stats') || 
                          requestUrl.includes('/visit') || 
                          requestUrl.includes('/click') ||
-                         requestUrl === '/admin/login';
+                         requestUrl === '/admin/login' ||
+                         requestUrl.includes('/admin/settings/telegram-bot-url/public');
     // УБРАЛИ автоматический редирект - теперь ошибки 401 обрабатываются в компонентах
     // Токен удаляется, но редирект не происходит автоматически
     if (is401 && !isPublicRoute) {

@@ -18,8 +18,13 @@ export function FinalCTA() {
   // Получаем ссылку напрямую из админ-панели при рендере
   useEffect(() => {
     settingsService.getTelegramBotUrlPublic()
-      .then(url => setFinalHref(url))
-      .catch(() => setFinalHref('https://t.me/SecretScin_bot'));
+      .then(url => {
+        setFinalHref(url);
+      })
+      .catch((error) => {
+        console.error('Failed to load bot URL:', error);
+        // Не устанавливаем дефолтную ссылку - пусть кнопка будет неактивна до загрузки
+      });
   }, []);
 
   const handleClick = () => {
@@ -59,8 +64,8 @@ export function FinalCTA() {
           className="mb-6 md:mb-8 flex justify-center"
         >
           <motion.a
-            href={finalHref || 'https://t.me/SecretScin_bot'}
-            onClick={handleClick}
+            href={finalHref || '#'}
+            onClick={finalHref ? handleClick : (e) => e.preventDefault()}
             target="_blank"
             rel="noopener noreferrer"
             whileHover={{ scale: 1.05, boxShadow: '0 0 50px rgba(255, 0, 122, 0.6)' }}
