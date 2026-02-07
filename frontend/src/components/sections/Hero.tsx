@@ -1,11 +1,15 @@
 import { motion } from 'framer-motion';
 import { Send } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { Badge } from '../ui/Badge';
 import { useLanding } from '../../contexts/LandingContext';
+import { settingsService } from '../../services/settingsService';
 import contentData from '../../data/content.json';
 
 export function Hero() {
   const { hero, global } = contentData;
+  const [finalHref, setFinalHref] = useState<string>('');
+  
   let landingContext;
   try {
     landingContext = useLanding();
@@ -13,14 +17,18 @@ export function Hero() {
     landingContext = null;
   }
 
+  // Получаем ссылку напрямую из админ-панели при рендере
+  useEffect(() => {
+    settingsService.getTelegramBotUrlPublic()
+      .then(url => setFinalHref(url))
+      .catch(() => setFinalHref('https://t.me/SecretScin_bot'));
+  }, []);
+
   const handleClick = () => {
     if (landingContext?.onTelegramClick) {
       landingContext.onTelegramClick();
     }
   };
-
-  // Используем ссылку из контекста, если она загружена, иначе не показываем кнопку
-  const finalHref = landingContext?.redirectUrl || null;
 
   return (
     <section className="relative z-10 flex flex-col items-center justify-center px-4 text-center py-8">
@@ -61,31 +69,29 @@ export function Hero() {
         {hero.description}
       </motion.p>
 
-      {/* CTA Button - показываем только когда ссылка загружена */}
-      {finalHref && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
+      {/* CTA Button */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+      >
+        <motion.a
+          href={finalHref || 'https://t.me/SecretScin_bot'}
+          onClick={handleClick}
+          target="_blank"
+          rel="noopener noreferrer"
+          whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(255, 0, 122, 0.5)' }}
+          whileTap={{ scale: 0.95 }}
+          className="group relative w-full max-w-sm flex items-center justify-center gap-3 px-8 md:px-10 py-4 md:py-5 bg-gradient-to-r from-[#FF007A] to-[#7B2CBF] text-white font-bold text-base md:text-lg rounded-2xl overflow-hidden transition-all duration-300 shadow-lg shadow-[#FF007A]/30"
         >
-          <motion.a
-            href={finalHref}
-            onClick={handleClick}
-            target="_blank"
-            rel="noopener noreferrer"
-            whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(255, 0, 122, 0.5)' }}
-            whileTap={{ scale: 0.95 }}
-            className="group relative w-full max-w-sm flex items-center justify-center gap-3 px-8 md:px-10 py-4 md:py-5 bg-gradient-to-r from-[#FF007A] to-[#7B2CBF] text-white font-bold text-base md:text-lg rounded-2xl overflow-hidden transition-all duration-300 shadow-lg shadow-[#FF007A]/30"
-          >
-            <div className="absolute inset-0 bg-white/0 group-hover:bg-white/20 transition-colors" />
-            <div className="relative z-10 flex items-center gap-3">
-              <Send className="w-5 h-5 rotate-45 flex-shrink-0" />
-              <span className="whitespace-nowrap">Начать прямо сейчас</span>
-            </div>
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-          </motion.a>
-        </motion.div>
-      )}
+          <div className="absolute inset-0 bg-white/0 group-hover:bg-white/20 transition-colors" />
+          <div className="relative z-10 flex items-center gap-3">
+            <Send className="w-5 h-5 rotate-45 flex-shrink-0" />
+            <span className="whitespace-nowrap">Начать прямо сейчас</span>
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+        </motion.a>
+      </motion.div>
 
       {/* Sub CTA */}
       <motion.p

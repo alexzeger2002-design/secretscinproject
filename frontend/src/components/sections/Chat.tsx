@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Zap, Send } from 'lucide-react';
 import { GlassCard } from '../ui/GlassCard';
 import { useLanding } from '../../contexts/LandingContext';
+import { settingsService } from '../../services/settingsService';
 import contentData from '../../data/content.json';
 import videoChat from '../../pages/б16.mp4';
 
@@ -116,6 +117,7 @@ function VideoPlayer({ src }: { src: string }) {
 export function Chat() {
   const { chat, global } = contentData;
   const [visibleMessages, setVisibleMessages] = useState<Message[]>([]);
+  const [finalHref, setFinalHref] = useState<string>('');
   
   let landingContext;
   try {
@@ -124,14 +126,18 @@ export function Chat() {
     landingContext = null;
   }
 
+  // Получаем ссылку напрямую из админ-панели при рендере
+  useEffect(() => {
+    settingsService.getTelegramBotUrlPublic()
+      .then(url => setFinalHref(url))
+      .catch(() => setFinalHref('https://t.me/SecretScin_bot'));
+  }, []);
+
   const handleClick = () => {
     if (landingContext?.onTelegramClick) {
       landingContext.onTelegramClick();
     }
   };
-
-  // Используем ссылку из контекста, если она загружена, иначе не показываем кнопку
-  const finalHref = landingContext?.redirectUrl || null;
 
   useEffect(() => {
     const messages = chat.messages as Message[];
@@ -211,13 +217,13 @@ export function Chat() {
                     </div>
                   )}
 
-                  {message.type === 'button' && finalHref && (
+                  {message.type === 'button' && (
                     <div className="w-full">
                       <div className="mb-4 px-4 py-2.5 bg-purple-900/40 text-white border border-purple-500/20 rounded-2xl rounded-tl-none text-sm">
                         {message.content}
                       </div>
                       <motion.a
-                        href={finalHref}
+                        href={finalHref || 'https://t.me/SecretScin_bot'}
                         onClick={handleClick}
                         target="_blank"
                         rel="noopener noreferrer"
